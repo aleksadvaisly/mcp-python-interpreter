@@ -28,10 +28,13 @@ parser.add_argument('--dir', type=str, default=os.getcwd(),
                     help='Working directory for code execution and file operations')
 parser.add_argument('--python-path', type=str, default=None,
                     help='Custom Python interpreter path to use as default')
+parser.add_argument('--enable-filesystem-tools', action='store_true',
+                    help='Enable file system tools (read_file, write_file, list_directory, get_file_in_current_dir)')
 args, unknown = parser.parse_known_args()
 
 # Check if system-wide access is enabled via environment variable
 ALLOW_SYSTEM_ACCESS = os.environ.get('MCP_ALLOW_SYSTEM_ACCESS', 'false').lower() in ('true', '1', 'yes')
+ENABLE_FILESYSTEM_TOOLS = args.enable_filesystem_tools
 
 # Set and create working directory
 WORKING_DIR = Path(args.dir).absolute()
@@ -48,7 +51,7 @@ print(f"System-wide file access: {'ENABLED' if ALLOW_SYSTEM_ACCESS else 'DISABLE
 # Create our MCP server
 mcp = FastMCP(
     "Python Interpreter",
-    description=f"Execute Python code, access Python environments, and manage Python files{' system-wide' if ALLOW_SYSTEM_ACCESS else f' in directory: {WORKING_DIR}'}",
+    description=f"Execute Python code, access Python environments, and manage Python files{' system-wide' if ALLOW_SYSTEM_ACCESS else f' in directory: {WORKING_DIR}'}. File system tools are {'enabled' if ENABLE_FILESYSTEM_TOOLS else 'disabled'} by default.",
     dependencies=["mcp[cli]"]
 )
 
@@ -239,206 +242,207 @@ def get_packages_resource(env_name: str) -> str:
     packages = get_installed_packages(env["path"])
     return json.dumps(packages, indent=2)
 
-@mcp.resource("python://file")
-def get_file_in_current_dir() -> str:
-    """List Python files in the current working directory."""
-    files = find_python_files(WORKING_DIR)
-    return json.dumps(files, indent=2)
-
-@mcp.tool()
-def read_file(file_path: str, max_size_kb: int = 1024) -> str:
-    """
-    Read the content of any file, with size limits for safety.
-    
-    Args:
-        file_path: Path to the file (relative to working directory or absolute)
-        max_size_kb: Maximum file size to read in KB (default: 1024)
-    
-    Returns:
-        str: File content or an error message
-    """
-    # Handle path based on security settings
-    path = Path(file_path)
-    if path.is_absolute():
-        if not is_path_allowed(path):
-            return f"Access denied: System-wide file access is {'DISABLED' if not ALLOW_SYSTEM_ACCESS else 'ENABLED, but this path is not allowed'}"
-    else:
-        # Make path relative to working directory if it's not already absolute
-        path = WORKING_DIR / path
-    
-    try:
-        if not path.exists():
-            return f"Error: File '{file_path}' not found"
-        
-        # Check file size
-        file_size_kb = path.stat().st_size / 1024
-        if file_size_kb > max_size_kb:
-            return f"Error: File size ({file_size_kb:.2f} KB) exceeds maximum allowed size ({max_size_kb} KB)"
-        
-        # Determine file type and read accordingly
-        try:
-            # Try to read as text first
-            with open(path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            # If it's a known source code type, use code block formatting
-            source_code_extensions = ['.py', '.js', '.html', '.css', '.json', '.xml', '.md', '.txt', '.sh', '.c', '.cpp', '.java', '.rb']
-            if path.suffix.lower() in source_code_extensions:
-                file_type = path.suffix[1:] if path.suffix else 'plain'
-                return f"File: {file_path}\n\n```{file_type}\n{content}\n```"
-            
-            # For other text files, return as-is
-            return f"File: {file_path}\n\n{content}"
-        
-        except UnicodeDecodeError:
-            # If text decoding fails, read as binary and show hex representation
-            with open(path, 'rb') as f:
-                content = f.read()
-                hex_content = content.hex()
-                return f"Binary file: {file_path}\nFile size: {len(content)} bytes\nHex representation (first 1024 chars):\n{hex_content[:1024]}"
-    
-    except Exception as e:
-        return f"Error reading file {file_path}: {str(e)}"
-
-@mcp.tool()
-def write_file(
-    file_path: str,
-    content: str,
-    overwrite: bool = False,
-    encoding: str = 'utf-8'
-) -> str:
-    """
-    Write content to a file in the working directory or system-wide if allowed.
-    
-    Args:
-        file_path: Path to the file to write (relative to working directory or absolute if system access is enabled)
-        content: Content to write to the file
-        overwrite: Whether to overwrite the file if it exists (default: False)
-        encoding: File encoding (default: utf-8)
-    
-    Returns:
-        str: Status message about the file writing operation
-    """
-    # Handle path based on security settings
-    path = Path(file_path)
-    if path.is_absolute():
-        if not is_path_allowed(path):
-            return f"For security reasons, you can only write files inside the working directory: {WORKING_DIR} (System-wide access is disabled)"
-    else:
-        # Make path relative to working directory if it's not already
-        path = WORKING_DIR / path
-    
-    try:
-        # Check if the file exists
-        if path.exists() and not overwrite:
-            return f"File '{path}' already exists. Use overwrite=True to replace it."
-        
-        # Create directory if it doesn't exist
-        path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Determine write mode based on content type
-        if isinstance(content, str):
-            # Text content
-            with open(path, 'w', encoding=encoding) as f:
-                f.write(content)
-        elif isinstance(content, bytes):
-            # Binary content
-            with open(path, 'wb') as f:
-                f.write(content)
-        else:
-            return f"Unsupported content type: {type(content)}"
-        
-        # Get file information
-        file_size_kb = path.stat().st_size / 1024
-        return f"Successfully wrote to {path}. File size: {file_size_kb:.2f} KB"
-    
-    except Exception as e:
-        return f"Error writing to file: {str(e)}"
-
-@mcp.resource("python://directory")
-def get_working_directory_listing() -> str:
-    """List all Python files in the working directory as a resource."""
-    try:
+if ENABLE_FILESYSTEM_TOOLS:
+    @mcp.resource("python://file")
+    def get_file_in_current_dir() -> str:
+        """List Python files in the current working directory."""
         files = find_python_files(WORKING_DIR)
-        return json.dumps({
-            "working_directory": str(WORKING_DIR),
-            "files": files
-        }, indent=2)
-    except Exception as e:
-        return f"Error listing directory: {str(e)}"
+        return json.dumps(files, indent=2)
 
-@mcp.tool()
-def list_directory(directory_path: str = "") -> str:
-    """
-    List all Python files in a directory or subdirectory.
-    
-    Args:
-        directory_path: Path to directory (relative to working directory or absolute, empty for working directory)
-    """
-    try:
-        # Handle empty path (use working directory)
-        if not directory_path:
-            path = WORKING_DIR
+    @mcp.tool()
+    def read_file(file_path: str, max_size_kb: int = 1024) -> str:
+        """
+        Read the content of any file, with size limits for safety.
+        
+        Args:
+            file_path: Path to the file (relative to working directory or absolute)
+            max_size_kb: Maximum file size to read in KB (default: 1024)
+        
+        Returns:
+            str: File content or an error message
+        """
+        # Handle path based on security settings
+        path = Path(file_path)
+        if path.is_absolute():
+            if not is_path_allowed(path):
+                return f"Access denied: System-wide file access is {'DISABLED' if not ALLOW_SYSTEM_ACCESS else 'ENABLED, but this path is not allowed'}"
         else:
-            # Handle absolute paths
-            path = Path(directory_path)
-            if path.is_absolute():
-                if not is_path_allowed(path):
-                    return f"Access denied: System-wide file access is {'DISABLED' if not ALLOW_SYSTEM_ACCESS else 'ENABLED, but this path is not allowed'}"
-            else:
-                # Make path relative to working directory if it's not already absolute
-                path = WORKING_DIR / directory_path
-                
-        # Check if directory exists
-        if not path.exists():
-            return f"Error: Directory '{directory_path}' not found"
-            
-        if not path.is_dir():
-            return f"Error: '{directory_path}' is not a directory"
-            
-        files = find_python_files(path)
+            # Make path relative to working directory if it's not already absolute
+            path = WORKING_DIR / path
         
-        if not files:
-            return f"No Python files found in {directory_path or 'working directory'}"
+        try:
+            if not path.exists():
+                return f"Error: File '{file_path}' not found"
             
-        result = f"Python files in directory: {directory_path or str(WORKING_DIR)}\n\n"
-        
-        # Group files by subdirectory for better organization
-        files_by_dir = {}
-        base_dir = path if ALLOW_SYSTEM_ACCESS else WORKING_DIR
-        
-        for file in files:
-            file_path = Path(file["path"])
+            # Check file size
+            file_size_kb = path.stat().st_size / 1024
+            if file_size_kb > max_size_kb:
+                return f"Error: File size ({file_size_kb:.2f} KB) exceeds maximum allowed size ({max_size_kb} KB)"
+            
+            # Determine file type and read accordingly
             try:
-                relative_path = file_path.relative_to(base_dir)
-                parent = str(relative_path.parent)
+                # Try to read as text first
+                with open(path, 'r', encoding='utf-8') as f:
+                    content = f.read()
                 
-                if parent == ".":
-                    parent = "(root)"
-            except ValueError:
-                # This can happen with system-wide access enabled
-                parent = str(file_path.parent)
+                # If it's a known source code type, use code block formatting
+                source_code_extensions = ['.py', '.js', '.html', '.css', '.json', '.xml', '.md', '.txt', '.sh', '.c', '.cpp', '.java', '.rb']
+                if path.suffix.lower() in source_code_extensions:
+                    file_type = path.suffix[1:] if path.suffix else 'plain'
+                    return f"File: {file_path}\n\n```{file_type}\n{content}\n```"
                 
-            if parent not in files_by_dir:
-                files_by_dir[parent] = []
-                
-            files_by_dir[parent].append({
-                "name": file["name"],
-                "size": file["size"],
-                "modified": file["modified"]
-            })
+                # For other text files, return as-is
+                return f"File: {file_path}\n\n{content}"
             
-        # Format the output
-        for dir_name, dir_files in sorted(files_by_dir.items()):
-            result += f"📁 {dir_name}:\n"
-            for file in sorted(dir_files, key=lambda x: x["name"]):
-                size_kb = round(file["size"] / 1024, 1)
-                result += f"  📄 {file['name']} ({size_kb} KB)\n"
-            result += "\n"
+            except UnicodeDecodeError:
+                # If text decoding fails, read as binary and show hex representation
+                with open(path, 'rb') as f:
+                    content = f.read()
+                    hex_content = content.hex()
+                    return f"Binary file: {file_path}\nFile size: {len(content)} bytes\nHex representation (first 1024 chars):\n{hex_content[:1024]}"
+        
+        except Exception as e:
+            return f"Error reading file {file_path}: {str(e)}"
+
+    @mcp.tool()
+    def write_file(
+        file_path: str,
+        content: str,
+        overwrite: bool = False,
+        encoding: str = 'utf-8'
+    ) -> str:
+        """
+        Write content to a file in the working directory or system-wide if allowed.
+        
+        Args:
+            file_path: Path to the file to write (relative to working directory or absolute if system access is enabled)
+            content: Content to write to the file
+            overwrite: Whether to overwrite the file if it exists (default: False)
+            encoding: File encoding (default: utf-8)
+        
+        Returns:
+            str: Status message about the file writing operation
+        """
+        # Handle path based on security settings
+        path = Path(file_path)
+        if path.is_absolute():
+            if not is_path_allowed(path):
+                return f"For security reasons, you can only write files inside the working directory: {WORKING_DIR} (System-wide access is {'DISABLED' if not ALLOW_SYSTEM_ACCESS else 'ENABLED, but this path is not allowed'})"
+        else:
+            # Make path relative to working directory if it's not already
+            path = WORKING_DIR / path
+        
+        try:
+            # Check if the file exists
+            if path.exists() and not overwrite:
+                return f"File '{path}' already exists. Use overwrite=True to replace it."
             
-        return result
-    except Exception as e:
-        return f"Error listing directory: {str(e)}"
+            # Create directory if it doesn't exist
+            path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Determine write mode based on content type
+            if isinstance(content, str):
+                # Text content
+                with open(path, 'w', encoding=encoding) as f:
+                    f.write(content)
+            elif isinstance(content, bytes):
+                # Binary content
+                with open(path, 'wb') as f:
+                    f.write(content)
+            else:
+                return f"Unsupported content type: {type(content)}"
+            
+            # Get file information
+            file_size_kb = path.stat().st_size / 1024
+            return f"Successfully wrote to {path}. File size: {file_size_kb:.2f} KB"
+        
+        except Exception as e:
+            return f"Error writing to file: {str(e)}"
+
+    @mcp.resource("python://directory")
+    def get_working_directory_listing() -> str:
+        """List all Python files in the working directory as a resource."""
+        try:
+            files = find_python_files(WORKING_DIR)
+            return json.dumps({
+                "working_directory": str(WORKING_DIR),
+                "files": files
+            }, indent=2)
+        except Exception as e:
+            return f"Error listing directory: {str(e)}"
+
+    @mcp.tool()
+    def list_directory(directory_path: str = "") -> str:
+        """
+        List all Python files in a directory or subdirectory.
+        
+        Args:
+            directory_path: Path to directory (relative to working directory or absolute, empty for working directory)
+        """
+        try:
+            # Handle empty path (use working directory)
+            if not directory_path:
+                path = WORKING_DIR
+            else:
+                # Handle absolute paths
+                path = Path(directory_path)
+                if path.is_absolute():
+                    if not is_path_allowed(path):
+                        return f"Access denied: System-wide file access is {'DISABLED' if not ALLOW_SYSTEM_ACCESS else 'ENABLED, but this path is not allowed'}"
+                else:
+                    # Make path relative to working directory if it's not already absolute
+                    path = WORKING_DIR / directory_path
+                    
+            # Check if directory exists
+            if not path.exists():
+                return f"Error: Directory '{directory_path}' not found"
+                
+            if not path.is_dir():
+                return f"Error: '{directory_path}' is not a directory"
+                
+            files = find_python_files(path)
+            
+            if not files:
+                return f"No Python files found in {directory_path or 'working directory'}"
+                
+            result = f"Python files in directory: {directory_path or str(WORKING_DIR)}\n\n"
+            
+            # Group files by subdirectory for better organization
+            files_by_dir = {}
+            base_dir = path if ALLOW_SYSTEM_ACCESS else WORKING_DIR
+            
+            for file in files:
+                file_path = Path(file["path"])
+                try:
+                    relative_path = file_path.relative_to(base_dir)
+                    parent = str(relative_path.parent)
+                    
+                    if parent == ".":
+                        parent = "(root)"
+                except ValueError:
+                    # This can happen with system-wide access enabled
+                    parent = str(file_path.parent)
+                    
+                if parent not in files_by_dir:
+                    files_by_dir[parent] = []
+                    
+                files_by_dir[parent].append({
+                    "name": file["name"],
+                    "size": file["size"],
+                    "modified": file["modified"]
+                })
+                
+            # Format the output
+            for dir_name, dir_files in sorted(files_by_dir.items()):
+                result += f"📁 {dir_name}:\n"
+                for file in sorted(dir_files, key=lambda x: x["name"]):
+                    size_kb = round(file["size"] / 1024, 1)
+                    result += f"  📄 {file['name']} ({size_kb} KB)\n"
+                result += "\n"
+                
+            return result
+        except Exception as e:
+            return f"Error listing directory: {str(e)}"
 
 # ============================================================================
 # Tools

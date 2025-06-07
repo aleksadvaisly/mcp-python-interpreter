@@ -59,16 +59,17 @@ For Windows:
 
 ```json
 {
-  "mcpServers": {
-    "python-interpreter": {
-      "command": "uvx",
-      "args": [
-        "mcp-python-interpreter",
-        "--dir",
-        "C:\\path\\to\\your\\working\\directory",
-        "--python-path",
-        "/path/to/your/python"
-      ],
+    "mcpServers": {
+      "python-interpreter": {
+        "command": "uvx",
+        "args": [
+          "mcp-python-interpreter",
+          "--dir",
+          "C:\\path\\to\\your\\working\\directory",
+          "--python-path",
+          "/path/to/your/python",
+          "--enable-filesystem-tools"
+        ],
         "env": {
             "MCP_ALLOW_SYSTEM_ACCESS": 0
         },
@@ -81,6 +82,8 @@ For Windows:
 6. You should now see the MCP tools icon in the chat interface
 
 The `--dir` parameter is **required** and specifies where all files will be saved and executed. This helps maintain security by isolating the MCP server to a specific directory.
+
+The `--enable-filesystem-tools` flag is **optional**. When provided, it enables the `read_file`, `write_file`, `list_directory`, and `get_file_in_current_dir` tools and resources. By default, these file system operations are disabled to avoid conflicts with other MCP tools that might provide similar functionalities.
 
 ### Prerequisites
 
@@ -106,20 +109,22 @@ The Python Interpreter provides the following tools:
 - **run_python_code**: Execute Python code in a specific environment
 - **run_python_file**: Execute a Python file in a specific environment
 
-### File Operations
+### File Operations (Requires `--enable-filesystem-tools` flag)
 - **read_file**: Read contents of any file type, with size and safety limits
   - Supports text files with syntax highlighting
   - Displays hex representation for binary files
 - **write_file**: Create or overwrite files with text or binary content
-- **write_python_file**: Create or overwrite a Python file specifically
 - **list_directory**: List Python files in a directory
+
+### Other File Operations
+- **write_python_file**: Create or overwrite a Python file specifically (always enabled)
 
 ## Available Resources
 
 - **python://environments**: List all available Python environments
 - **python://packages/{env_name}**: List installed packages for a specific environment
-- **python://file/{file_path}**: Get the content of a Python file
-- **python://directory/{directory_path}**: List all Python files in a directory
+- **python://file/{file_path}**: Get the content of a Python file (Requires `--enable-filesystem-tools` flag)
+- **python://directory/{directory_path}**: List all Python files in a directory (Requires `--enable-filesystem-tools` flag)
 
 ## Prompts
 
@@ -142,7 +147,7 @@ Here are some examples of what you can ask Claude to do with this MCP server:
 
 ## File Handling Capabilities
 
-The MCP Python Interpreter now supports comprehensive file operations:
+The MCP Python Interpreter supports comprehensive file operations when `--enable-filesystem-tools` is active:
 - Read text and binary files up to 1MB
 - Write text and binary files
 - Syntax highlighting for source code files
