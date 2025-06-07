@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mcp-python-interpreter = "mcp_python_interpreter.main:main"
+mcp-python-interpreter = "mcp_python_interpreter.server:mcp.run"
 
 [project.urls]
 "Homepage" = "https://github.com/yzfly/mcp-python-interpreter"

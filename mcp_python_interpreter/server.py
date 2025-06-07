@@ -47,6 +47,7 @@ DEFAULT_PYTHON_PATH = args.python_path if args.python_path else sys.executable
 print(f"MCP Python Interpreter starting in directory: {WORKING_DIR}", file=sys.stderr)
 print(f"Using default Python interpreter: {DEFAULT_PYTHON_PATH}", file=sys.stderr)
 print(f"System-wide file access: {'ENABLED' if ALLOW_SYSTEM_ACCESS else 'DISABLED'}", file=sys.stderr)
+print(f"Using file access features: {'ENABLED' if ENABLE_FILESYSTEM_TOOLS else 'DISABLED'}", file=sys.stderr)
 
 # Create our MCP server
 mcp = FastMCP(

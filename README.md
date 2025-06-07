@@ -78,6 +78,33 @@ For Windows:
 }
 ```
 
+**To run a local copy of the server (e.g., for development):**
+
+```json
+{
+    "mcpServers": {
+      "python-interpreter": {
+            "command": "uv",
+            "args":
+            [
+                "run",
+                "--directory",
+                "/Users/aleks/projects/mcp-python-interpreter",
+                "mcp-python-interpreter",
+                "--dir",
+                "/Users/aleks/projects/python-interpreter-workspace",
+                "--python-path",
+                "/Users/aleks/projects/python-interpreter-workspace/.venv/bin/python"
+            ],
+            "env":
+            {
+                "MCP_ALLOW_SYSTEM_ACCESS": "0"
+            }
+        }
+    }
+}
+```
+
 5. Restart Claude Desktop
 6. You should now see the MCP tools icon in the chat interface
 

@@ -7,6 +7,6 @@ wheels/
 test_dir/
 *.egg-info
 .pyirc
-
+uv.lock
 # Virtual environments
 .venv
